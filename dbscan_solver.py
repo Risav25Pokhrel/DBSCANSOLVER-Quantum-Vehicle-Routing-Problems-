@@ -14,12 +14,18 @@ class DbScanSolver:
     def __init__(self,path):
         datapath=self.hp.convertTxToCSV(path=path,fileName="dataset1")
         self.df=pd.read_csv(datapath[0])
+        customerPos=self.df.iloc[:,[1,2]].to_numpy()
+        self.startingPoint = self.df.iloc[[0]].copy()
+        self.startingPoint['cluster'] = -1#For starting point
+
+        self.df = self.df.iloc[1:].reset_index(drop=True)
         self.numberOfVehicles=datapath[2]
         self.vehicleCapacity=datapath[1]
         self.customerPositions=self.df.iloc[:,[1,2]].to_numpy()
         self.numberOfCustomers=len(self.customerPositions)
         print("Data set Loaded")
-        plt.scatter(self.customerPositions[:,0],self.customerPositions[:,1],s=10, c= "black")
+        plt.figure(figsize=(14, 10))
+        plt.scatter(customerPos[:,0],customerPos[:,1],s=10, c= "black")
         plt.title("Customer Positions")
         plt.show()
     
@@ -28,6 +34,7 @@ class DbScanSolver:
     numberOfVehicles=None
     numberOfCustomers=None
     df=None
+    startingPoint=None
 
     hp=Helper()
 
@@ -122,7 +129,8 @@ class DbScanSolver:
                 isCapacityExceedByAnyCluster = True
                 
             status = "Vehicle Capacity Exceeded" if isCapacityExceeded else "OK"
-            print(f"Cluster {cluster_label} - Size: {cluster_size}, Demand: {total_demand}, Status: {status}")
+            utilization="" if isCapacityExceeded else f", Utilization: {(total_demand*100/self.vehicleCapacity)}" 
+            print(f"Cluster {cluster_label} - Size: {cluster_size}, Demand: {total_demand}, Status: {status} {utilization}")
             
             cluster_stats.append({
                 'cluster_label': cluster_label,
@@ -142,6 +150,7 @@ class DbScanSolver:
             print("- Increasing vehicle capacity")
             return None
         
+        df_copy=pd.concat([self.startingPoint,df_copy],ignore_index=True)
         print(f"\nAll capacity constraints satisfied! Proceeding with TSP optimization...")
         return self.applyTSP(df_copy)  # Use the copy with cluster labels
     
@@ -284,21 +293,24 @@ class DbScanSolver:
             if isCapacityExceeded:
                 isCapacityExceedByAnyCluster = True
             status = "EXCEEDED" if isCapacityExceeded else "OK"
-            print(f"Cluster {cluster_id}: {len(cluster_data)} points, demand {total_demand}, status {status}")
+            utilization="" if isCapacityExceeded else f", Utilization: {(total_demand*100/self.vehicleCapacity)}"
+            print(f"Cluster {cluster_id}: {len(cluster_data)} points, demand {total_demand}, status {status} {utilization}")
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
         if isCapacityExceedByAnyCluster:
             print("\nSome clusters still exceed capacity constraints")
         else:
             print("\nAll capacity constraints satisfied")
-        
+       
         return final_result
     
 ###########################################~~~~~Recursive DBSCAN SOLVER~~~~~#################################################
     def applyRecursiveDBScan(self,min_radius:float,max_radius:float,min_no_clusters:int):
+        print(f"Vehicle Capacity: {self.vehicleCapacity}")
         cluster =self.recursiveDBScan(min_radius=min_radius,max_radius=max_radius,min_no_clusters=min_no_clusters,df=self.df)
+        final_result=pd.concat([self.startingPoint,cluster],ignore_index=True)
         if cluster is not None:
-            return self.applyTSP(clusters=cluster)
+            return self.applyTSP(clusters=final_result)
 
 ###########################################~~~~~TODO Call DIFFERENT SOlver~~~~~#################################################
 
